@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vyoma BizKhata — Simple Double-Entry Journal</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --card:#111823; --muted:#8aa0b6; --text:#e6eef6; --accent:#6ad2ff; --accent-2:#82ffa1; --danger:#ff7b7b;
+      --border:#1f2a38;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial}
+    header{position:sticky;top:0;background:linear-gradient(180deg, rgba(17,24,35,.95), rgba(17,24,35,.8));backdrop-filter:blur(6px);z-index:10;border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    h1{margin:0;font-size:18px;letter-spacing:.2px}
+    .subtitle{color:var(--muted);font-size:12px}
+    .grid{display:grid;gap:12px}
+    @media(min-width:900px){.grid{grid-template-columns:1.1fr .9fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    label{font-size:12px;color:var(--muted)}
+    input, select, textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0d141f;color:var(--text)}
+    textarea{resize:vertical;min-height:70px}
+    .btn{appearance:none;border:1px solid var(--border);background:#0f1622;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn:hover{border-color:#2a3a50}
+    .btn.primary{background:linear-gradient(135deg, #0d2433, #0b2a3a);border-color:#1f3b53}
+    .btn.accent{background:linear-gradient(135deg,#0e2330,#0b2e38);border-color:#204958;color:var(--accent)}
+    .btn.danger{border-color:#412328;background:#241013;color:#ffb4b4}
+    .btn.ghost{background:transparent}
+    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px dashed var(--border);text-align:left}
+    th{font-weight:600;color:#bcd0e4}
+    tfoot td{font-weight:700}
+    .right{text-align:right}
+    .muted{color:var(--muted)}
+    .tag{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace;border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:12px;color:#cfe3f8}
+    .spacer{height:8px}
+    .hidden{display:none}
+    .note{font-size:12px;color:var(--muted)}
+    .footer{color:var(--muted);text-align:center;padding:20px}
+    .badge-ok{color:var(--accent-2)}
+    .badge-bad{color:var(--danger)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap row" style="justify-content:space-between;align-items:center">
+      <div>
+        <h1>Vyoma BizKhata — Double‑Entry Journal</h1>
+        <div class="subtitle">Fast, simple journal + trial balance. Works offline in your browser.</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="btn-export">Export JSON</button>
+        <label class="btn ghost" for="file-import">Import JSON</label>
+        <input id="file-import" type="file" accept="application/json" class="hidden" />
+        <button class="btn danger" id="btn-reset" title="Clear all local data">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap grid" id="app">
+    <!-- Left: Journal Entry Form & List -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0;font-size:16px">New Journal Entry</h2>
+        <div class="row">
+          <button class="btn accent" id="btn-add-account">+ Account</button>
+          <span class="pill">Shortcut: <span class="kbd">Ctrl</span> + <span class="kbd">S</span> to Save</span>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <form id="entry-form">
+        <div class="row">
+          <div style="flex:1;min-width:160px">
+            <label>Date</label>
+            <input type="date" id="date" required />
+          </div>
+          <div style="flex:2;min-width:220px">
+            <label>Debit Account</label>
+            <input list="accounts" id="debit" placeholder="e.g., Cash" required />
+          </div>
+          <div style="flex:2;min-width:220px">
+            <label>Credit Account</label>
+            <input list="accounts" id="credit" placeholder="e.g., Sales" required />
+          </div>
+          <div style="flex:1;min-width:140px">
+            <label>Amount</label>
+            <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required />
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <label>Narration</label>
+        <textarea id="narration" placeholder="Short description…"></textarea>
+        <div class="spacer"></div>
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="note">Rule: Every entry must have equal debit & credit. This form enforces that with one amount field.</div>
+          <div class="row">
+            <button class="btn" type="button" id="btn-clear">Clear</button>
+            <button class="btn primary" type="submit">Add Entry</button>
+          </div>
+        </div>
+      </form>
+
+      <datalist id="accounts"></datalist>
+
+      <div class="spacer"></div>
+      <hr style="border:none;border-top:1px solid var(--border)">
+      <div class="spacer"></div>
+
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0;font-size:15px">Journal</h3>
+        <div class="row">
+          <input id="search" placeholder="Search narration/account…" style="min-width:220px" />
+          <input id="from" type="date" title="From" />
+          <input id="to" type="date" title="To" />
+          <button class="btn" id="btn-export-csv">Export CSV</button>
+          <button class="btn" id="btn-print">Print</button>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <table id="journal-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Debit</th>
+            <th>Credit</th>
+            <th class="right">Amount</th>
+            <th>Narration</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="right">Total</td>
+            <td class="right" id="journal-total">0.00</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+    </section>
+
+    <!-- Right: Accounts & Trial Balance -->
+    <aside class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0;font-size:16px">Accounts & Trial Balance</h2>
+        <div class="tag" id="tb-status">Balanced</div>
+      </div>
+      <div class="spacer"></div>
+
+      <table id="tb-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Type</th>
+            <th class="right">Debit</th>
+            <th class="right">Credit</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2" class="right">Totals</td>
+            <td class="right" id="tb-debits">0.00</td>
+            <td class="right" id="tb-credits">0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="spacer"></div>
+      <button class="btn" id="btn-export-tb">Export Trial Balance CSV</button>
+
+      <div class="spacer"></div>
+      <details>
+        <summary class="muted">How balances work (click)</summary>
+        <p class="note">Trial Balance sums all journal debits and credits per account. Assets/Expenses normally show debit balances; Liabilities/Equity/Income normally show credit balances.</p>
+      </details>
+    </aside>
+  </main>
+
+  <!-- Modal: Add/Edit Account -->
+  <dialog id="account-modal" style="border:none;border-radius:16px;padding:0;background:var(--card);color:var(--text);">
+    <form method="dialog" class="card" style="margin:0;min-width:360px">
+      <h3 style="margin-top:0">Account</h3>
+      <label>Name</label>
+      <input id="acc-name" placeholder="e.g., Cash" required />
+      <div class="spacer"></div>
+      <label>Type</label>
+      <select id="acc-type">
+        <option>Asset</option>
+        <option>Liability</option>
+        <option>Equity</option>
+        <option>Income</option>
+        <option>Expense</option>
+      </select>
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" id="acc-save" value="default">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="row-template">
+    <tr>
+      <td class="date"></td>
+      <td class="debit"></td>
+      <td class="credit"></td>
+      <td class="amt right"></td>
+      <td class="narration"></td>
+      <td class="actions right"></td>
+    </tr>
+  </template>
+
+  <script>
+    // --- Simple storage helpers ---
+    const LS = {
+      get(k, v){ try{ return JSON.parse(localStorage.getItem(k)) ?? v }catch{ return v } },
+      set(k, v){ localStorage.setItem(k, JSON.stringify(v)) }
+    }
+
+    const state = {
+      accounts: LS.get('bk_accounts', {
+        "Cash": {type:"Asset"},
+        "Bank": {type:"Asset"},
+        "Capital": {type:"Equity"},
+        "Sales": {type:"Income"},
+        "Purchases": {type:"Expense"}
+      }),
+      journal: LS.get('bk_journal', [])
+    }
+
+    // --- UI Elements ---
+    const form = document.getElementById('entry-form')
+    const elDate = document.getElementById('date')
+    const elDebit = document.getElementById('debit')
+    const elCredit = document.getElementById('credit')
+    const elAmount = document.getElementById('amount')
+    const elNarr = document.getElementById('narration')
+    const elDatalist = document.getElementById('accounts')
+
+    const tblJournal = document.querySelector('#journal-table tbody')
+    const elJournalTotal = document.getElementById('journal-total')
+
+    const tblTB = document.querySelector('#tb-table tbody')
+    const elTBDr = document.getElementById('tb-debits')
+    const elTBCr = document.getElementById('tb-credits')
+    const elTBStatus = document.getElementById('tb-status')
+
+    const tplRow = document.getElementById('row-template')
+
+    // Filters
+    const elSearch = document.getElementById('search')
+    const elFrom = document.getElementById('from')
+    const elTo = document.getElementById('to')
+
+    // Buttons
+    document.getElementById('btn-add-account').onclick = () => openAccountModal()
+    document.getElementById('btn-clear').onclick = () => { form.reset(); defaultDate() }
+    document.getElementById('btn-print').onclick = () => window.print()
+    document.getElementById('btn-export').onclick = exportJSON
+    document.getElementById('btn-export-csv').onclick = exportJournalCSV
+    document.getElementById('btn-export-tb').onclick = exportTBCSV
+    document.getElementById('btn-reset').onclick = resetAll
+    document.getElementById('file-import').addEventListener('change', importJSON)
+
+    // Save on Ctrl+S
+    document.addEventListener('keydown', (e)=>{
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){
+        e.preventDefault(); form.requestSubmit()
+      }
+    })
+
+    function defaultDate(){
+      const today = new Date().toISOString().slice(0,10)
+      if(!elDate.value) elDate.value = today
+    }
+
+    // --- Accounts ---
+    function refreshAccountList(){
+      elDatalist.innerHTML = Object.keys(state.accounts)
+        .sort((a,b)=>a.localeCompare(b))
+        .map(n=>`<option value="${escapeHtml(n)}"></option>`).join('')
+      renderTB()
+    }
+
+    function addOrUpdateAccount(name, type){
+      name = name.trim()
+      if(!name) return alert('Account name is required')
+      state.accounts[name] = {type}
+      persist()
+      refreshAccountList()
+    }
+
+    function openAccountModal(name="", type="Asset"){
+      const dlg = document.getElementById('account-modal')
+      const nm = document.getElementById('acc-name')
+      const tp = document.getElementById('acc-type')
+      nm.value = name; tp.value = type
+      dlg.showModal()
+      setTimeout(()=>nm.focus(), 60)
+      document.getElementById('acc-save').onclick = () => {
+        addOrUpdateAccount(nm.value, tp.value)
+      }
+    }
+
+    // --- Journal ---
+    form.onsubmit = (e)=>{
+      e.preventDefault()
+      const date = elDate.value
+      const debit = tidy(elDebit.value)
+      const credit = tidy(elCredit.value)
+      const amount = +(+elAmount.value).toFixed(2)
+      const narration = (elNarr.value||'').trim()
+
+      if(!date || !debit || !credit || !amount) return alert('Fill all required fields')
+      if(debit===credit) return alert('Debit and Credit accounts must be different')
+      if(amount<=0) return alert('Amount must be positive')
+
+      // Ensure accounts exist (ask to create if missing)
+      for(const acc of [debit, credit]){
+        if(!state.accounts[acc]){
+          if(confirm(`Account "${acc}" not found. Create as Asset?`)){
+            state.accounts[acc] = {type:'Asset'}
+          } else return
+        }
+      }
+
+      const entry = { id: crypto.randomUUID(), date, debit, credit, amount, narration }
+      state.journal.push(entry)
+      persist()
+      form.reset(); defaultDate(); elDebit.focus()
+      render()
+    }
+
+    function deleteEntry(id){
+      if(!confirm('Delete this entry?')) return
+      state.journal = state.journal.filter(e=>e.id!==id)
+      persist(); render()
+    }
+
+    function renderJournal(){
+      const rows = filterJournal().sort((a,b)=>a.date.localeCompare(b.date))
+      tblJournal.innerHTML = ''
+      let total = 0
+      for(const e of rows){
+        const tr = tplRow.content.firstElementChild.cloneNode(true)
+        tr.querySelector('.date').textContent = e.date
+        tr.querySelector('.debit').textContent = e.debit
+        tr.querySelector('.credit').textContent = e.credit
+        tr.querySelector('.amt').textContent = money(e.amount)
+        tr.querySelector('.narration').textContent = e.narration || ''
+        const act = document.createElement('div')
+        const btnDel = document.createElement('button'); btnDel.className='btn danger'; btnDel.textContent='Delete'
+        btnDel.onclick = ()=>deleteEntry(e.id)
+        act.append(btnDel)
+        tr.querySelector('.actions').append(act)
+        tblJournal.append(tr)
+        total += e.amount
+      }
+      elJournalTotal.textContent = money(total)
+    }
+
+    function filterJournal(){
+      const q = tidy(elSearch.value)
+      const from = elFrom.value
+      const to = elTo.value
+      return state.journal.filter(e=>{
+        if(q){
+          const s = (e.narration+" "+e.debit+" "+e.credit).toLowerCase()
+          if(!s.includes(q)) return false
+        }
+        if(from && e.date < from) return false
+        if(to && e.date > to) return false
+        return true
+      })
+    }
+
+    elSearch.oninput = renderJournal
+    elFrom.onchange = renderJournal
+    elTo.onchange = renderJournal
+
+    // --- Trial Balance ---
+    function computeTB(){
+      const map = {}
+      for(const [name, info] of Object.entries(state.accounts)){
+        map[name] = {type: info.type, debit:0, credit:0}
+      }
+      for(const j of state.journal){
+        map[j.debit] ??= {type:'Asset', debit:0, credit:0}
+        map[j.credit] ??= {type:'Liability', debit:0, credit:0}
+        map[j.debit].debit += j.amount
+        map[j.credit].credit += j.amount
+      }
+      return map
+    }
+
+    function renderTB(){
+      const tb = computeTB()
+      tblTB.innerHTML = ''
+      let tDr=0, tCr=0
+      for(const [name, row] of Object.entries(tb).sort((a,b)=>a[0].localeCompare(b[0]))){
+        const tr = document.createElement('tr')
+        const tds = [name, row.type, money(row.debit), money(row.credit)]
+        tr.innerHTML = `<td>${escapeHtml(tds[0])}</td><td><span class="tag">${escapeHtml(tds[1])}</span></td><td class="right">${tds[2]}</td><td class="right">${tds[3]}</td><td class="right"><button class="btn" data-edit="${escapeAttr(name)}">Edit</button> <button class="btn danger" data-del="${escapeAttr(name)}">Remove</button></td>`
+        tblTB.append(tr)
+        tDr += row.debit; tCr += row.credit
+      }
+      elTBDr.textContent = money(tDr)
+      elTBCr.textContent = money(tCr)
+      const balanced = Math.abs(tDr - tCr) < 0.005
+      elTBStatus.textContent = balanced ? 'Balanced' : 'Not Balanced'
+      elTBStatus.className = balanced ? 'tag badge-ok' : 'tag badge-bad'
+
+      // Row actions
+      tblTB.querySelectorAll('button[data-edit]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const name = btn.getAttribute('data-edit')
+          openAccountModal(name, state.accounts[name]?.type || 'Asset')
+        }
+      })
+      tblTB.querySelectorAll('button[data-del]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const name = btn.getAttribute('data-del')
+          if(!confirm(`Delete account "${name}"? Entries will remain but account will be shown with default type.`)) return
+          delete state.accounts[name]
+          persist(); render()
+        }
+      })
+    }
+
+    // --- Export/Import ---
+    function exportJSON(){
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'})
+      download(blob, `bizkhata_${new Date().toISOString().slice(0,10)}.json`)
+    }
+
+    function exportJournalCSV(){
+      const rows = [['Date','Debit','Credit','Amount','Narration']]
+      for(const e of filterJournal()){
+        rows.push([e.date, e.debit, e.credit, e.amount, e.narration?.replaceAll('\n',' ')||''])
+      }
+      const blob = new Blob([rows.map(r=>r.map(csvCell).join(',')).join('\n')], {type:'text/csv'})
+      download(blob, 'journal.csv')
+    }
+
+    function exportTBCSV(){
+      const tb = computeTB()
+      const rows = [['Account','Type','Debit','Credit']]
+      for(const [name, r] of Object.entries(tb)) rows.push([name, r.type, r.debit.toFixed(2), r.credit.toFixed(2)])
+      const blob = new Blob([rows.map(r=>r.map(csvCell).join(',')).join('\n')], {type:'text/csv'})
+      download(blob, 'trial_balance.csv')
+    }
+
+    async function importJSON(ev){
+      const f = ev.target.files?.[0]; if(!f) return
+      const text = await f.text()
+      try{
+        const data = JSON.parse(text)
+        if(!data.accounts || !data.journal) throw new Error('Invalid file')
+        state.accounts = data.accounts; state.journal = data.journal
+        persist(); render(); alert('Imported successfully')
+      }catch(err){
+        alert('Import failed: '+err.message)
+      }
+      ev.target.value = ''
+    }
+
+    function resetAll(){
+      if(!confirm('This will delete all BizKhata data stored in this browser. Continue?')) return
+      localStorage.removeItem('bk_accounts'); localStorage.removeItem('bk_journal')
+      state.accounts = {"Cash":{type:'Asset'},"Bank":{type:'Asset'},"Capital":{type:'Equity'},"Sales":{type:'Income'},"Purchases":{type:'Expense'}}
+      state.journal = []
+      render()
+    }
+
+    // --- Utils ---
+    function persist(){ LS.set('bk_accounts', state.accounts); LS.set('bk_journal', state.journal) }
+    function money(n){ return (+n).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}) }
+    function tidy(s){ return (s||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) }
+    function download(blob, filename){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500) }
+    function csvCell(v){ v = String(v ?? ''); if(/[",\n]/.test(v)) return '"'+v.replaceAll('"','""')+'"'; return v }
+    function escapeHtml(s=''){ return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;') }
+    function escapeAttr(s=''){ return String(s).replaceAll('"','&quot;') }
+
+    // --- Boot ---
+    function render(){ refreshAccountList(); renderJournal(); renderTB() }
+    defaultDate(); render()
+  </script>
+</body>
+</html>
