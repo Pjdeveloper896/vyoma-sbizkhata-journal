@@ -1,7 +1,7 @@
 {
   "name": "Gamified Debt Crusher",
   "short_name": "DebtCrusher",
-  "start_url": "/index.html",
+  "start_url": "/debt.html",
   "display": "standalone",
   "background_color": "#071026",
   "theme_color": "#0d9488",
