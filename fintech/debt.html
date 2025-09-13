@@ -1,0 +1,336 @@
+<!--
+Project: Gamified Debt Crusher (PWA demo)
+Files included below in this single document: 
+  1) index.html  (main single-file app with inline CSS+JS)
+  2) manifest.json (copy as separate file)
+  3) sw.js (service worker - copy as separate file)
+
+Instructions: Save index.html, manifest.json and sw.js to the same folder on a static host (GitHub Pages, Netlify, Vercel). Serve over HTTPS. Open index.html in Chrome/Edge to test PWA install prompt.
+-->
+
+<!-- ===== index.html ===== -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gamified Debt Crusher — Vyoma</title>
+
+  <!-- PWA manifest link -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0d9488" />
+
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass: rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;color:#e6eef8;background:linear-gradient(180deg,#071026 0%, #071b2a 100%);}
+    .app{max-width:980px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center}
+    h1{margin:0;font-size:20px}
+    .subtitle{color:var(--muted);font-size:13px}
+
+    .grid{display:grid;grid-template-columns:1fr 360px;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+
+    /* debt list */
+    .debt-list{display:flex;flex-direction:column;gap:10px}
+    .debt{display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent)}
+    .debt .meta{display:flex;gap:10px;align-items:center}
+    .pill{background:var(--glass);padding:6px 10px;border-radius:999px;color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:8px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:#e6eef8;cursor:pointer}
+    .primary{background:linear-gradient(90deg,var(--accent),#0ea5a4);border:none}
+
+    form{display:flex;flex-direction:column;gap:8px}
+    input,select{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+
+    .progress{height:12px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,#06b6d4,#7dd3fc);width:0%}
+
+    /* right column */
+    .stats{display:flex;flex-direction:column;gap:10px}
+    .stat{display:flex;justify-content:space-between;align-items:center}
+    .xp{font-weight:700}
+
+    footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
+
+    /* responsive */
+    @media (max-width:880px){.grid{grid-template-columns:1fr;}.app{padding:12px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Gamified Debt Crusher</h1>
+        <div class="subtitle">Turn repayments into XP, levels & rewards — built for Vyoma</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button id="installBtn">Install</button>
+        <button id="resetBtn" title="Reset demo">Reset</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <main>
+        <div class="card">
+          <h3 style="margin-top:0">Your Debts</h3>
+          <div class="debt-list" id="debtList"></div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)">
+
+          <h4 style="margin:6px 0">Add debt / loan</h4>
+          <form id="addDebtForm">
+            <input id="title" placeholder="Name (e.g., Student Loan, EMI, Friend)" required />
+            <div style="display:flex;gap:8px">
+              <input id="amount" type="number" placeholder="Total amount (₹)" required />
+              <input id="minPay" type="number" placeholder="Min pay (₹)" required />
+            </div>
+            <button class="primary" type="submit">Add Debt</button>
+          </form>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h3 style="margin:0">Quests & Challenges</h3>
+          <p class="subtitle">Complete daily/weekly challenges to get bonus XP or rewards</p>
+          <ul id="quests" style="padding-left:18px"></ul>
+        </div>
+      </main>
+
+      <aside>
+        <div class="card stats">
+          <div class="stat"><span>Level</span><span id="level">1</span></div>
+          <div class="stat"><span>XP</span><span class="xp" id="xp">0</span></div>
+          <div class="stat"><span>Coins</span><span id="coins">0</span></div>
+          <div>
+            <div class="subtitle">Progress to next level</div>
+            <div class="progress" aria-hidden><i id="xpBar"></i></div>
+          </div>
+          <div style="margin-top:8px"><button id="claimReward">Claim Reward</button></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4 style="margin:0">Badges</h4>
+          <div id="badges" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4 style="margin:0">Cheat-sheet</h4>
+          <ul class="subtitle" style="padding-left:18px">
+            <li>Paying more than min → bonus XP</li>
+            <li>Streaks give coins for small rewards</li>
+            <li>Complete quests to unlock badges</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <footer>Built for Vyoma • Works offline after first load</footer>
+  </div>
+
+  <script>
+  // ----------------- PWA install prompt handling -----------------
+  let deferredPrompt;
+  const installBtn = document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.style.display = 'inline-block';
+  });
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.style.display = 'none';
+  });
+
+  // ----------------- App logic -----------------
+  const STORAGE_KEY = 'vyoma-debt-crusher-v1';
+  const stateDefaults = {
+    debts: [],
+    xp: 0,
+    level: 1,
+    coins: 0,
+    badges: [],
+    quests: [
+      {id:'q1',text:'Make a payment ≥ 2× min pay',done:false,xp:30},
+      {id:'q2',text:'Pay on 3 consecutive days',done:false,xp:50},
+      {id:'q3',text:'Clear a debt fully',done:false,xp:150}
+    ],
+    streak:0,
+    lastPayDate: null
+  };
+
+  let state = loadState();
+
+  function saveState(){localStorage.setItem(STORAGE_KEY, JSON.stringify(state));}
+  function loadState(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY));return s? s : JSON.parse(JSON.stringify(stateDefaults));}catch(e){return JSON.parse(JSON.stringify(stateDefaults));}}
+
+  // UI refs
+  const debtList = document.getElementById('debtList');
+  const addDebtForm = document.getElementById('addDebtForm');
+  const questsEl = document.getElementById('quests');
+  const xpEl = document.getElementById('xp');
+  const levelEl = document.getElementById('level');
+  const coinsEl = document.getElementById('coins');
+  const xpBar = document.getElementById('xpBar');
+  const badgesEl = document.getElementById('badges');
+  const claimBtn = document.getElementById('claimReward');
+
+  function render(){
+    // debts
+    debtList.innerHTML = '';
+    state.debts.forEach((d,idx)=>{
+      const wrap = document.createElement('div');wrap.className='debt';
+      const left = document.createElement('div');left.className='meta';
+      left.innerHTML = `<div><strong>${escapeHtml(d.title)}</strong><div class='subtitle'>Remaining ₹${format(d.remaining)} • Min ₹${format(d.min)}</div></div>`;
+      const controls = document.createElement('div');controls.className='controls';
+      const payBtn = document.createElement('button');payBtn.textContent='Pay';
+      payBtn.addEventListener('click',()=>openPayPrompt(idx));
+      const quickBtn = document.createElement('button');quickBtn.textContent='Quick +₹'+format(d.min);
+      quickBtn.addEventListener('click',()=>makePayment(idx, d.min));
+      controls.appendChild(quickBtn);controls.appendChild(payBtn);
+      wrap.appendChild(left);wrap.appendChild(controls);
+      debtList.appendChild(wrap);
+    });
+
+    // quests
+    questsEl.innerHTML='';
+    state.quests.forEach(q=>{
+      const li = document.createElement('li');
+      li.textContent = q.text + (q.done? ' ✅':'');
+      questsEl.appendChild(li);
+    });
+
+    // stats
+    xpEl.textContent = state.xp;
+    levelEl.textContent = state.level;
+    coinsEl.textContent = state.coins;
+    const next = xpForNextLevel(state.level);
+    const pct = Math.min(100, Math.round((state.xp / next)*100));
+    xpBar.style.width = pct + '%';
+
+    // badges
+    badgesEl.innerHTML='';
+    state.badges.forEach(b=>{
+      const bEl = document.createElement('div');bEl.className='pill';bEl.textContent=b;
+      badgesEl.appendChild(bEl);
+    });
+
+    saveState();
+  }
+
+  function addDebt(title, amount, min){
+    state.debts.push({title, amount: +amount, remaining:+amount, min:+min});render();}
+
+  addDebtForm.addEventListener('submit',(e)=>{
+    e.preventDefault();
+    const title = document.getElementById('title').value.trim();
+    const amount = document.getElementById('amount').value;
+    const min = document.getElementById('minPay').value;
+    if(!title || !amount) return;
+    addDebt(title, amount, min);
+    addDebtForm.reset();
+  });
+
+  function openPayPrompt(idx){
+    const d = state.debts[idx];
+    const amt = prompt(`Pay amount for ${d.title} (min ₹${d.min})`, d.min);
+    const parsed = parseFloat(amt);
+    if(isNaN(parsed) || parsed<=0) return;
+    makePayment(idx, parsed);
+  }
+
+  function makePayment(idx, amt){
+    const d = state.debts[idx];
+    const pay = Math.min(amt, d.remaining);
+    d.remaining = +(d.remaining - pay).toFixed(2);
+
+    // XP rules
+    let earned = Math.floor(pay/10); // 1 XP per ₹10 paid
+    if(pay >= d.min*2) earned += 20; // bonus for paying ≥2x min
+    if(isDebtCleared(d)){
+      earned += 100; // clearing bonus
+      awardBadge('Debt Vanquisher');
+      state.quests = state.quests.map(q=> q.id==='q3'? {...q,done:true} : q);
+    }
+
+    state.xp += earned;
+    checkLevelUp();
+
+    // coins & streaks
+    const today = (new Date()).toDateString();
+    if(state.lastPayDate === today){
+      // same day multiple payments do not increase streak
+    } else {
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+      if(state.lastPayDate === yesterday.toDateString()){
+        state.streak = (state.streak || 0) + 1;
+      } else state.streak = 1;
+      state.lastPayDate = today;
+    }
+    // coins reward for streaks
+    if(state.streak && state.streak % 3 === 0) state.coins += 10*state.streak;
+
+    // update quests
+    if(pay >= d.min*2) state.quests = state.quests.map(q=> q.id==='q1'? {...q,done:true} : q);
+    if(state.streak>=3) state.quests = state.quests.map(q=> q.id==='q2'? {...q,done:true} : q);
+
+    // remove debt if cleared
+    if(d.remaining <= 0) state.debts.splice(idx,1);
+
+    // small animation / feedback
+    alert(`Paid ₹${format(pay)} — earned ${earned} XP!`);
+    render();
+  }
+
+  function isDebtCleared(d){return d.remaining <= 0.001}
+
+  function awardBadge(b){ if(!state.badges.includes(b)) state.badges.push(b); }
+
+  function xpForNextLevel(l){ return Math.round(100 + (l-1)*75 + Math.pow(l,2)*20); }
+  function checkLevelUp(){
+    let next = xpForNextLevel(state.level);
+    while(state.xp >= next){ state.xp -= next; state.level++; awardBadge('Level '+state.level); next = xpForNextLevel(state.level); }
+  }
+
+  function format(n){return Number(n).toLocaleString('en-IN');}
+  function escapeHtml(s){return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+  // claim simple reward
+  claimBtn.addEventListener('click',()=>{
+    if(state.coins < 20){ alert('Need 20 coins to claim a reward — earn by streaks and quests.'); return; }
+    state.coins -= 20; state.xp += 40; alert('Reward claimed — +40 XP!'); render();
+  });
+
+  // Reset button
+  document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('Reset demo data?')){ localStorage.removeItem(STORAGE_KEY); state = JSON.parse(JSON.stringify(stateDefaults)); render(); }});
+
+  // init demo content if empty
+  if(state.debts.length===0 && localStorage.getItem(STORAGE_KEY)===null){
+    addDebt('Student Loan', 80000, 2000);
+    addDebt('Phone EMI', 15000, 1500);
+    addDebt('Friend — Rohan', 1200, 200);
+  }
+
+  // initial render
+  render();
+
+  // register service worker
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').then(()=>console.log('SW registered')).catch(()=>console.log('SW failed'));
+  }
+  </script>
+</body>
+</html>
+
+
+
+<!-- ===== manifest.json (save as manifest.json in same folder) ===== -->
+
+
+
+<!-- ===== sw.js (save as sw.js in same folder) ===== -->
+
+
+<!-- End of files -->
