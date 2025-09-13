@@ -1,7 +1,7 @@
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open('vyoma-debt-crusher-v1').then(cache => cache.addAll([
-      '/', '/index.html', '/manifest.json'
+      '/', '/debt.html', '/manifest.json'
     ]))
   );
 });
